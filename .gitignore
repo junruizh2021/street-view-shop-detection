@@ -1,0 +1,45 @@
+# Ignore everything by default. This repository keeps source and documentation only.
+*
+
+# Allow Git to traverse directories and keep this policy file.
+!*/
+!.gitignore
+
+# Source code.
+!*.py
+!*.pyi
+!*.html
+!*.css
+!*.js
+!*.jsx
+!*.ts
+!*.tsx
+!*.sh
+!*.bash
+
+# Documentation.
+!*.md
+!*.rst
+
+# Demo input asset (explicit exception; other videos remain ignored).
+!街景视频.mp4
+
+# README demo preview (other generated images remain ignored).
+!assets/baozipu-demo.gif
+
+# Source/build/dependency configuration.
+!Dockerfile
+!Dockerfile.*
+!Makefile
+!pyproject.toml
+!setup.cfg
+!requirements*.txt
+!environment*.yml
+!environment*.yaml
+!package.json
+!package-lock.json
+!pnpm-lock.yaml
+!yarn.lock
+!*.toml
+!*.yaml
+!*.yml

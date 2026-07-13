@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>交通场景事件订阅</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f5f8;
+      --panel: rgba(255, 255, 255, 0.88);
+      --text: #252631;
+      --muted: #8a8d99;
+      --line: #ececf2;
+      --purple: #675cff;
+      --purple-soft: #f0efff;
+      --shadow: 0 20px 55px rgba(42, 45, 68, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 6% 8%, #fff 0, transparent 28%),
+        radial-gradient(circle at 92% 88%, #e8e9f7 0, transparent 30%),
+        var(--bg);
+    }
+    button { font: inherit; }
+    .shell { width: min(1460px, calc(100% - 56px)); margin: 0 auto; padding: 24px 0 42px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+    .back {
+      width: 46px; height: 46px; border: 0; border-radius: 50%;
+      background: #fff; box-shadow: 0 8px 26px rgba(30, 33, 51, .08);
+      font-size: 28px; cursor: pointer;
+    }
+    .tabs {
+      display: flex; gap: 4px; padding: 5px; border-radius: 28px;
+      background: rgba(255,255,255,.72); color: #8c8f9c;
+    }
+    .tab { padding: 11px 26px; border-radius: 22px; font-weight: 600; }
+    .tab.active { color: #343642; background: #fff; box-shadow: 0 5px 18px rgba(35,38,56,.07); }
+    .model-pill {
+      min-width: 176px; padding: 11px 16px; border-radius: 22px;
+      background: #fff; font-size: 13px; color: var(--muted); text-align: center;
+    }
+    .model-pill.ready { color: #16815d; background: #eaf9f2; }
+    .model-pill.error { color: #b84242; background: #fff0f0; }
+    .workspace { display: grid; grid-template-columns: minmax(0, 1fr) 560px; gap: 34px; }
+    .heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 14px; }
+    h1 { margin: 0 0 7px; font-size: 30px; letter-spacing: -.5px; }
+    .subtitle { margin: 0; color: var(--muted); font-size: 14px; }
+    .tag {
+      padding: 9px 16px; color: #9b8738; background: #fff9df;
+      border-radius: 20px; font-size: 13px; font-weight: 700;
+    }
+    .player-card { overflow: hidden; border-radius: 28px; background: #202124; box-shadow: var(--shadow); }
+    .video-wrap { position: relative; aspect-ratio: 16/9; background: #111; }
+    video { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .video-overlay {
+      position: absolute; inset: 0; display: grid; place-items: center;
+      background: linear-gradient(180deg, rgba(0,0,0,.04), rgba(0,0,0,.2));
+      pointer-events: none; transition: opacity .2s;
+    }
+    .video-overlay.hidden { opacity: 0; }
+    .play-disc {
+      width: 78px; height: 78px; border-radius: 50%; display: grid; place-items: center;
+      color: #fff; font-size: 30px; background: rgba(103,92,255,.9);
+      box-shadow: 0 12px 35px rgba(64,52,210,.35);
+    }
+    .controls { padding: 28px 30px 30px; color: #fff; }
+    .instruction { margin: 0 0 20px; color: #b8b9c0; line-height: 1.7; }
+    .chips { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 26px; }
+    .chip {
+      padding: 11px 16px; border-radius: 22px; background: #3a3b3f;
+      color: #e7e7eb; font-size: 14px;
+    }
+    .chip::before { content: "✓"; display: inline-grid; place-items: center; width: 19px; height: 19px;
+      margin-right: 8px; border-radius: 50%; color: #333; background: #fff; font-size: 12px; font-weight: 800; }
+    .control-row { display: flex; align-items: center; gap: 14px; }
+    .time { color: #a8a9b0; font-variant-numeric: tabular-nums; }
+    .progress { flex: 1; height: 5px; overflow: hidden; border-radius: 4px; background: #4a4b50; }
+    .progress > span { display: block; width: 0; height: 100%; background: var(--purple); transition: width .15s linear; }
+    .start {
+      border: 0; border-radius: 26px; padding: 13px 24px; color: #fff;
+      background: var(--purple); font-weight: 700; cursor: pointer;
+      box-shadow: 0 10px 24px rgba(103,92,255,.32);
+    }
+    .start:disabled { cursor: wait; opacity: .55; }
+    .events-panel {
+      min-height: 700px; padding: 32px; border: 1px solid rgba(255,255,255,.9);
+      border-radius: 30px; background: var(--panel); box-shadow: var(--shadow);
+      backdrop-filter: blur(15px);
+    }
+    .events-panel h2 { margin: 0 0 25px; font-size: 22px; }
+    .scan-status {
+      display: flex; align-items: center; gap: 12px; padding: 17px 18px;
+      border-radius: 16px; background: #fff; color: #8c8f9a; font-size: 14px;
+    }
+    .signal { position: relative; width: 22px; height: 22px; }
+    .signal::before, .signal::after {
+      content: ""; position: absolute; inset: 5px; border: 2px solid #9189ff;
+      border-radius: 50%; animation: pulse 1.5s infinite;
+    }
+    .signal::after { inset: 0; opacity: .35; animation-delay: .35s; }
+    @keyframes pulse { 0% { transform: scale(.65); opacity: 1; } 100% { transform: scale(1.2); opacity: 0; } }
+    .event-header { display: flex; justify-content: space-between; margin: 27px 2px 13px; color: #777a86; font-size: 14px; }
+    .event-list { display: flex; flex-direction: column; gap: 14px; }
+    .empty { padding: 62px 20px; text-align: center; color: #a3a5ae; line-height: 1.7; }
+    .event-card {
+      display: grid; grid-template-columns: 148px 1fr; gap: 18px; align-items: center;
+      padding: 13px; border: 1px solid var(--line); border-radius: 20px; background: #fff;
+      opacity: 0; transform: translateY(10px); animation: arrive .35s forwards;
+    }
+    @keyframes arrive { to { opacity: 1; transform: translateY(0); } }
+    .thumb { width: 148px; height: 84px; border-radius: 14px; object-fit: cover; background: #ddd; }
+    .event-time { display: inline-block; margin-bottom: 7px; padding: 4px 8px; border-radius: 8px;
+      color: var(--purple); background: var(--purple-soft); font-size: 12px; font-weight: 700; }
+    .event-title { margin: 0 0 6px; font-size: 16px; }
+    .event-meta { color: #858894; font-size: 13px; }
+    @media (max-width: 1050px) {
+      .workspace { grid-template-columns: 1fr; }
+      .events-panel { min-height: 420px; }
+      .model-pill { display: none; }
+    }
+    @media (max-width: 650px) {
+      .shell { width: calc(100% - 24px); }
+      .tabs { display: none; }
+      .event-card { grid-template-columns: 112px 1fr; }
+      .thumb { width: 112px; height: 68px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <button class="back" aria-label="返回">‹</button>
+      <nav class="tabs">
+        <span class="tab">全牌解说家</span>
+        <span class="tab">懂你的“魔镜”</span>
+        <span class="tab">智能影像师</span>
+        <span class="tab active">事件订阅</span>
+      </nav>
+      <div id="modelStatus" class="model-pill">模型加载中...</div>
+    </header>
+
+    <section class="workspace">
+      <div>
+        <div class="heading">
+          <div>
+            <h1>事件订阅</h1>
+            <p class="subtitle">订阅沿街门店，行车沿途为你精准捕捉</p>
+          </div>
+          <span class="tag">#座舱场景</span>
+        </div>
+        <article class="player-card">
+          <div class="video-wrap">
+            <video id="video" preload="auto" muted playsinline src="/media/video"></video>
+            <div id="videoOverlay" class="video-overlay"><div class="play-disc">▶</div></div>
+          </div>
+          <div class="controls">
+            <p class="instruction">选择想要订阅的事件，点击开始体验。系统将实时理解外行车环境，捕捉到事件后及时提醒。</p>
+            <div class="chips">
+              <span class="chip">寻找奶茶店</span>
+              <span class="chip">寻找包子店</span>
+              <span class="chip">识别车辆左右侧</span>
+            </div>
+            <div class="control-row">
+              <span id="currentTime" class="time">00:00</span>
+              <div class="progress"><span id="progressBar"></span></div>
+              <button id="startButton" class="start" disabled>模型加载中</button>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <aside class="events-panel">
+        <h2>实时描述区域</h2>
+        <div class="scan-status"><span class="signal"></span><span id="scanText">等待模型就绪</span></div>
+        <div class="event-header">
+          <span>已发现事件（<b id="eventCount">0</b>）</span>
+          <span id="inferProgress">00:00</span>
+        </div>
+        <div id="eventList" class="event-list">
+          <div id="emptyState" class="empty">点击开始后，发现的沿街目标将在这里实时出现。</div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <canvas id="captureCanvas" hidden></canvas>
+  <script>
+    const video = document.getElementById("video");
+    const startButton = document.getElementById("startButton");
+    const modelStatus = document.getElementById("modelStatus");
+    const scanText = document.getElementById("scanText");
+    const eventList = document.getElementById("eventList");
+    const eventCount = document.getElementById("eventCount");
+    const emptyState = document.getElementById("emptyState");
+    const progressBar = document.getElementById("progressBar");
+    const currentTime = document.getElementById("currentTime");
+    const inferProgress = document.getElementById("inferProgress");
+    const videoOverlay = document.getElementById("videoOverlay");
+    const canvas = document.getElementById("captureCanvas");
+
+    let source = null;
+    let running = false;
+    let findings = [];
+    let displayed = new Set();
+    let scheduled = new Set();
+    let renderQueue = Promise.resolve();
+
+    const fmt = seconds => {
+      const value = Math.max(0, Math.round(seconds || 0));
+      return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+    };
+
+    async function pollStatus() {
+      const state = await fetch("/api/status").then(r => r.json());
+      modelStatus.textContent = state.message;
+      modelStatus.className = `model-pill ${state.status}`;
+      if (state.status === "ready") {
+        startButton.disabled = false;
+        startButton.textContent = "开始体验";
+        scanText.textContent = "模型已就绪，等待开始";
+        return;
+      }
+      if (state.status === "error") {
+        startButton.textContent = "模型加载失败";
+        scanText.textContent = state.message;
+        return;
+      }
+      setTimeout(pollStatus, 500);
+    }
+
+    function resetDemo() {
+      findings = [];
+      displayed.clear();
+      scheduled.clear();
+      renderQueue = Promise.resolve();
+      eventList.innerHTML = "";
+      eventList.appendChild(emptyState);
+      emptyState.style.display = "block";
+      eventCount.textContent = "0";
+      inferProgress.textContent = "00:00";
+      video.currentTime = 0;
+      progressBar.style.width = "0%";
+    }
+
+    function makeThumbnail(timestamp) {
+      const temp = document.createElement("video");
+      temp.src = "/media/video";
+      temp.muted = true;
+      temp.preload = "auto";
+      return new Promise(resolve => {
+        temp.addEventListener("loadedmetadata", () => { temp.currentTime = timestamp; }, {once: true});
+        temp.addEventListener("seeked", () => {
+          canvas.width = 480;
+          canvas.height = 270;
+          canvas.getContext("2d").drawImage(temp, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", .82));
+          temp.remove();
+        }, {once: true});
+      });
+    }
+
+    async function showFinding(item) {
+      const key = item.name;
+      if (displayed.has(key)) return;
+      displayed.add(key);
+      emptyState.style.display = "none";
+      const image = await makeThumbnail(item.timestamp_sec);
+      const card = document.createElement("article");
+      card.className = "event-card";
+      card.innerHTML = `
+        <img class="thumb" src="${image}" alt="${item.name}">
+        <div>
+          <span class="event-time">${item.timestamp}</span>
+          <h3 class="event-title">找到“${item.name}”</h3>
+          <div class="event-meta">${item.type} · ${item.side}</div>
+        </div>`;
+      eventList.appendChild(card);
+      eventCount.textContent = String(displayed.size);
+    }
+
+    function flushFindings() {
+      findings.sort((a, b) => a.timestamp_sec - b.timestamp_sec || a.name.localeCompare(b.name));
+      findings
+        .filter(item => item.timestamp_sec <= video.currentTime + .25)
+        .forEach(item => {
+          const key = item.name;
+          if (displayed.has(key) || scheduled.has(key)) return;
+          scheduled.add(key);
+          renderQueue = renderQueue.then(() => showFinding(item));
+        });
+    }
+
+    function startInference() {
+      if (source) source.close();
+      source = new EventSource("/api/analyze");
+      source.addEventListener("started", () => { scanText.textContent = "持续搜寻中..."; });
+      source.addEventListener("progress", event => {
+        const data = JSON.parse(event.data);
+        inferProgress.textContent = fmt(data.timestamp_sec);
+      });
+      source.addEventListener("finding", event => {
+        findings.push(JSON.parse(event.data));
+        flushFindings();
+      });
+      source.addEventListener("complete", () => {
+        scanText.textContent = "视频分析完成";
+        source.close();
+      });
+      source.addEventListener("error", () => {
+        if (running) scanText.textContent = "推理连接已结束";
+      });
+    }
+
+    startButton.addEventListener("click", async () => {
+      if (running) {
+        video.pause();
+        running = false;
+        startButton.textContent = "继续播放";
+        scanText.textContent = "已暂停";
+        return;
+      }
+      if (video.ended || video.currentTime === 0) {
+        resetDemo();
+        startInference();
+      }
+      await video.play();
+      running = true;
+      startButton.textContent = "暂停";
+      videoOverlay.classList.add("hidden");
+      scanText.textContent = "持续搜寻中...";
+    });
+
+    video.addEventListener("timeupdate", () => {
+      currentTime.textContent = fmt(video.currentTime);
+      progressBar.style.width = `${video.duration ? video.currentTime / video.duration * 100 : 0}%`;
+      flushFindings();
+    });
+    video.addEventListener("ended", () => {
+      running = false;
+      startButton.textContent = "重新播放";
+      videoOverlay.classList.remove("hidden");
+      flushFindings();
+      scanText.textContent = "视频分析完成";
+    });
+
+    pollStatus();
+  </script>
+</body>
+</html>
