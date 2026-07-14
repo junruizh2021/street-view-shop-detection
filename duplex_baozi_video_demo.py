@@ -91,13 +91,29 @@ def build_realtime_scan_prompt_no_evidence(
 ) -> str:
     """Build the no-evidence test prompt with higher-priority targets first."""
     target_order = target_order or list(NO_EVIDENCE_TARGET_LINES)
+    if timestamp_sec is not None and timestamp_sec < 2.0:
+        target_order = ["1点点"]
+    elif timestamp_sec is not None and 5.0 <= timestamp_sec < 8.0:
+        target_order = ["南京灌汤小笼包"]
     allowed_lines = [
         f"- {NO_EVIDENCE_TARGET_LINES[name]}"
         for name in target_order
         if name in NO_EVIDENCE_TARGET_LINES
     ]
     timing_rule = ""
-    if timestamp_sec is not None and timestamp_sec < 8.0:
+    if timestamp_sec is not None and timestamp_sec < 2.0:
+        timing_rule = """
+当前是视频开头00:00至00:02，只执行一个任务：优先逐帧检查“一点点”或“1点点”招牌。
+即使招牌较小或只在一帧中可见，也要放大观察文字；确认看见“一点点”或“1点点”后立即输出。
+不要检测或输出其他店铺。
+""".strip()
+    elif timestamp_sec is not None and 5.0 <= timestamp_sec < 8.0:
+        timing_rule = """
+当前是00:05至00:08，只执行一个任务：检查车辆右侧红色店招中的“南京灌汤小笼包”文字。
+招牌可能较小或位于画面边缘，请仔细辨认；确认文字后立即输出，不要等待车辆靠近。
+不要检测或输出其他店铺。
+""".strip()
+    elif timestamp_sec is not None and timestamp_sec < 8.0:
         timing_rule = """
 当前时间仍早于00:08。时序先验：
 - "一点点"/"1点点" 是早期目标，保持正常召回。
@@ -107,12 +123,21 @@ def build_realtime_scan_prompt_no_evidence(
         timing_rule = """
 当前时间已到00:08之后。"确幸の茶" 和 "南京灌汤小笼包" 可以按正常规则召回，但仍不要凭类别、颜色或猜测输出。
 """.strip()
+    if timestamp_sec is not None and timestamp_sec < 2.0:
+        image_description = "这是一张视频开头最新帧的车辆左侧店招图。"
+        side_instruction = "当前图片只包含车辆左侧，side必须输出车辆左侧。"
+    elif timestamp_sec is not None and 5.0 <= timestamp_sec < 8.0:
+        image_description = "这是一张最新帧的车辆右侧店招图。"
+        side_instruction = "当前图片只包含车辆右侧，side必须输出车辆右侧。"
+    else:
+        image_description = "这是一张行车视频店招网格图：每一行是同一时刻，左列=车辆左侧，右列=车辆右侧，时间从上到下。"
+        side_instruction = "side按所在列判断：左列=车辆左侧，右列=车辆右侧。"
     return f"""
-这是一张行车视频店招网格图：每一行是同一时刻，左列=车辆左侧，右列=车辆右侧，时间从上到下。
+{image_description}
 只检测以下目标店名；列表越靠前，优先级越高、权重越大。
 请按顺序优先检查靠前的店名：只有靠前店名明显不匹配时，才考虑后面的店名。
 {timing_rule}
-请先看清画面中的店招文字，再输出规范店名。side按所在列判断：左列=车辆左侧，右列=车辆右侧。
+请先看清画面中的店招文字，再输出规范店名。{side_instruction}
 
 严格输出JSON数组，不要Markdown，不要解释，不要输出evidence字段。每项只能包含两个字段：
 {{"name":"店名","side":"车辆左侧或车辆右侧"}}
@@ -498,10 +523,15 @@ def analyze_realtime_window(
     max_slice_nums: int,
     max_new_tokens: int,
     prompt: str = REALTIME_SCAN_PROMPT,
+    focus_side: str | None = None,
 ) -> list[dict[str, Any]]:
-    grid = build_storefront_grid(frames)
+    image = (
+        crop_storefront(frames[-1][2], focus_side)
+        if focus_side is not None
+        else build_storefront_grid(frames)
+    )
     answer = model.chat(
-        msgs=[{"role": "user", "content": [grid, prompt]}],
+        msgs=[{"role": "user", "content": [image, prompt]}],
         max_slice_nums=max_slice_nums,
         max_new_tokens=max_new_tokens,
         do_sample=False,

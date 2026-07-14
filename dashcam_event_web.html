@@ -180,7 +180,6 @@
         <div class="scan-status"><span class="signal"></span><span id="scanText">等待模型就绪</span></div>
         <div class="event-header">
           <span>已发现事件（<b id="eventCount">0</b>）</span>
-          <span id="inferProgress">00:00</span>
         </div>
         <div id="eventList" class="event-list">
           <div id="emptyState" class="empty">点击开始后，发现的沿街目标将在这里实时出现。</div>
@@ -200,7 +199,6 @@
     const emptyState = document.getElementById("emptyState");
     const progressBar = document.getElementById("progressBar");
     const currentTime = document.getElementById("currentTime");
-    const inferProgress = document.getElementById("inferProgress");
     const videoOverlay = document.getElementById("videoOverlay");
     const canvas = document.getElementById("captureCanvas");
 
@@ -243,7 +241,6 @@
       eventList.appendChild(emptyState);
       emptyState.style.display = "block";
       eventCount.textContent = "0";
-      inferProgress.textContent = "00:00";
       video.currentTime = 0;
       progressBar.style.width = "0%";
     }
@@ -300,10 +297,6 @@
       if (source) source.close();
       source = new EventSource("/api/analyze");
       source.addEventListener("started", () => { scanText.textContent = "持续搜寻中..."; });
-      source.addEventListener("progress", event => {
-        const data = JSON.parse(event.data);
-        inferProgress.textContent = fmt(data.timestamp_sec);
-      });
       source.addEventListener("finding", event => {
         findings.push(JSON.parse(event.data));
         flushFindings();

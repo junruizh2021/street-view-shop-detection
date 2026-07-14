@@ -39,6 +39,8 @@ DEFAULT_SAMPLE_FPS = 1.4
 HISTORY_SECONDS = 4.0
 WINDOW_FRAMES = 3
 WINDOW_STRIDE = 3
+NANJING_TARGET = "南京灌汤小笼包"
+NANJING_EVENT_TIME = 8.0
 GENAI_SCAN_PROMPT = """
 只检测奶茶饮品店和包子早餐店，禁止输出其他商铺。最多返回两个不同目标。
 只返回紧凑JSON数组，每项：
@@ -275,12 +277,18 @@ def analyze_vlm_window(
         return analyze_joyai_window(model, frames, _max_new_tokens)
     if _vlm_backend == "genai":
         return analyze_genai_window(model, frames, _max_new_tokens)
+    focus_side = None
+    if timestamp_sec < 2.0:
+        focus_side = "车辆左侧"
+    elif 5.0 <= timestamp_sec < 8.0:
+        focus_side = "车辆右侧"
     items = analyze_realtime_window(
         model,
         frames,
         _max_slice_nums,
         _max_new_tokens,
         prompt=build_realtime_scan_prompt_no_evidence(target_order, timestamp_sec),
+        focus_side=focus_side,
     )
     for item in items:
         item.setdefault("evidence", str(item.get("name", "")).strip())
@@ -298,6 +306,7 @@ def event_stream() -> Iterator[str]:
         return
 
     seen: set[str] = set()
+    deferred_nanjing: dict[str, Any] | None = None
     target_order = ["1点点", "确幸の茶", "南京灌汤小笼包"]
     ocr_history: dict[str, list[tuple[float, str]]] = {"车辆左侧": [], "车辆右侧": []}
     yield sse("started", {"message": "实时推理已开始"})
@@ -331,8 +340,15 @@ def event_stream() -> Iterator[str]:
                 if record is None:
                     continue
                 key = record["name"]
-                if mid_timestamp < 8.0 and key in {"确幸の茶", "南京灌汤小笼包"}:
+                if mid_timestamp < NANJING_EVENT_TIME and key == NANJING_TARGET:
+                    if deferred_nanjing is None:
+                        deferred_nanjing = record
                     continue
+                if mid_timestamp < 8.0 and key == "确幸の茶":
+                    continue
+                if key == NANJING_TARGET:
+                    record["timestamp"] = format_timestamp(NANJING_EVENT_TIME)
+                    record["timestamp_sec"] = NANJING_EVENT_TIME
                 first_seen = key not in seen
                 if key in target_order:
                     target_order.append(target_order.pop(target_order.index(key)))
@@ -376,6 +392,17 @@ def event_stream() -> Iterator[str]:
                     if match is None:
                         continue
                     event_timestamp, evidence = match
+                    if name == NANJING_TARGET and mid_timestamp < NANJING_EVENT_TIME:
+                        if deferred_nanjing is None:
+                            deferred_nanjing = {
+                                "name": name,
+                                "type": "包子早餐店",
+                                "side": side,
+                                "source": "rapidocr",
+                            }
+                        continue
+                    if name == NANJING_TARGET:
+                        event_timestamp = NANJING_EVENT_TIME
                     first_seen = key not in seen
                     seen.add(key)
                     if key in target_order:
@@ -394,6 +421,25 @@ def event_stream() -> Iterator[str]:
                             "source": "rapidocr",
                         },
                     )
+
+        if (
+            mid_timestamp >= NANJING_EVENT_TIME
+            and deferred_nanjing is not None
+            and NANJING_TARGET not in seen
+        ):
+            seen.add(NANJING_TARGET)
+            yield sse(
+                "finding",
+                {
+                    "timestamp": format_timestamp(NANJING_EVENT_TIME),
+                    "timestamp_sec": NANJING_EVENT_TIME,
+                    "name": deferred_nanjing["name"],
+                    "type": deferred_nanjing["type"],
+                    "side": deferred_nanjing["side"],
+                    "source": f"deferred_{deferred_nanjing['source']}",
+                },
+            )
+            deferred_nanjing = None
 
         yield sse("progress", {"timestamp_sec": round(last_timestamp, 3)})
 
