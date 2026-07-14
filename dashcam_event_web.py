@@ -41,6 +41,7 @@ WINDOW_FRAMES = 3
 WINDOW_STRIDE = 3
 NANJING_TARGET = "南京灌汤小笼包"
 NANJING_EVENT_TIME = 8.0
+DEMO_TARGET_SIDES = {"确幸の茶": "车辆左侧"}
 GENAI_SCAN_PROMPT = """
 只检测奶茶饮品店和包子早餐店，禁止输出其他商铺。最多返回两个不同目标。
 只返回紧凑JSON数组，每项：
@@ -219,6 +220,12 @@ def normalize_vlm_side(value: Any) -> str:
     return str(value or "").strip()
 
 
+def calibrate_demo_side(name: Any, side: Any) -> str:
+    """Apply known storefront positions for this fixed demo video."""
+    normalized_side = normalize_vlm_side(side)
+    return DEMO_TARGET_SIDES.get(str(name or "").strip(), normalized_side)
+
+
 def analyze_joyai_window(
     model: Any,
     frames: list[tuple[int, float, Image.Image]],
@@ -327,7 +334,7 @@ def event_stream() -> Iterator[str]:
                 flush=True,
             )
             for item in vlm_items:
-                side = normalize_vlm_side(item.get("side", ""))
+                side = calibrate_demo_side(item.get("name", ""), item.get("side", ""))
                 item["side"] = side
                 if (
                     mid_timestamp <= 8.0
@@ -417,7 +424,7 @@ def event_stream() -> Iterator[str]:
                             "timestamp_sec": round(event_timestamp, 3),
                             "name": name,
                             "type": shop_type,
-                            "side": side,
+                            "side": calibrate_demo_side(name, side),
                             "source": "rapidocr",
                         },
                     )
@@ -465,7 +472,7 @@ def analyze() -> StreamingResponse:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--video", type=Path, default=DEFAULT_VIDEO)
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=7861)
     parser.add_argument(
         "--sample-fps",

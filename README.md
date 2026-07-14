@@ -6,7 +6,7 @@ Demo 以连续三帧作为一个分析窗口。当前推荐配置在 Intel 358H 
 
 ## Demo 效果演示
 
-![街景商铺识别 Demo 效果](assets/baozipu-demo.gif)
+![MiniCPM-o 包子铺 Demo 效果](assets/Minicpm-o%20-%20包子铺Demo%20-%202026年7月14日%2016.52.40.gif)
 
 ## 启动 Demo
 
@@ -27,7 +27,44 @@ python3 dashcam_event_web.py \
   --disable-ocr
 ```
 
-启动后访问 `http://<远端机器地址>:7861`，点击 **开始体验** 播放视频并查看检测事件。
+Web UI 监听地址为 `http://0.0.0.0:7861`。远程访问时，在浏览器中使用 `http://<服务器 IP>:7861`，点击 **开始体验** 播放视频并查看检测事件。
+
+## Docker 部署
+
+Docker 镜像包含 Demo 源码、街景视频、MiniCPM-o OpenVINO 模型、Python 依赖和 Intel GPU 用户态驱动。默认从项目相邻目录 `../MiniCPM-o-4_5-OV` 读取模型，并使用 `http://proxy.cd.intel.com:911` 下载构建依赖。
+
+一键构建：
+
+```bash
+./docker/build.sh
+```
+
+使用其他模型目录或镜像标签：
+
+```bash
+MODEL_DIR=/path/to/MiniCPM-o-4_5-OV \
+IMAGE_TAG=baozipu-demo:custom \
+./docker/build.sh
+```
+
+不使用代理或使用其他代理：
+
+```bash
+PROXY_URL="" ./docker/build.sh
+PROXY_URL=http://proxy.example.com:8080 ./docker/build.sh
+```
+
+构建完成后启动 GPU 容器：
+
+```bash
+./docker/run.sh
+```
+
+脚本会自动挂载 `/dev/dri` 并添加设备对应的用户组。Web UI 监听地址为 `http://0.0.0.0:7861`；远程访问时使用 `http://<服务器 IP>:7861`。查看启动日志可执行：
+
+```bash
+docker logs -f baozipu-demo
+```
 
 ## Benchmark
 
