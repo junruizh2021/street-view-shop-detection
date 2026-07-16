@@ -213,6 +213,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if not rows:
         raise RuntimeError("No measured windows; reduce warmup or check the video")
     hits = sorted(found_targets)
+    tps_rows = [row for row in rows if row["tps"] > 0]
     summary = {
         "model": "MiniCPM-o-4.5 Omni 9B",
         "model_path": args.model_path,
@@ -225,7 +226,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "warmup_windows": args.warmup_windows,
         "measured_windows": len(rows),
         "ttft_s_mean": statistics.mean(row["ttft_s"] for row in rows),
-        "tps_mean": statistics.mean(row["tps"] for row in rows),
+        "tps_mean": statistics.mean(row["tps"] for row in tps_rows) if tps_rows else None,
+        "tps_measured_windows": len(tps_rows),
         "e2e_s_mean": statistics.mean(row["e2e_s"] for row in rows),
         "system_memory_baseline_gib": baseline_memory,
         "system_memory_peak_gib": peak_memory,
